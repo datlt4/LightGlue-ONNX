@@ -159,6 +159,7 @@ class SuperPoint(nn.Module):
         if image.shape[1] == 3:  # RGB
             scale = image.new_tensor([0.299, 0.587, 0.114]).view(1, 3, 1, 1)
             image = (image * scale).sum(1, keepdim=True)
+    
         # Shared Encoder
         x = self.relu(self.conv1a(image))
         x = self.relu(self.conv1b(x))
@@ -180,6 +181,11 @@ class SuperPoint(nn.Module):
         scores = scores.permute(0, 2, 3, 1).reshape(b, h, w, 8, 8)
         scores = scores.permute(0, 1, 3, 2, 4).reshape(b, h * 8, w * 8)
         scores = simple_nms(scores, self.conf["nms_radius"])
+
+        # Compute the dense descriptors
+        cDa = self.relu(self.convDa(x))
+        descriptors = self.convDb(cDa)
+        descriptors = torch.nn.functional.normalize(descriptors, p=2, dim=1)
 
         # Discard keypoints near the image borders
         if self.conf["remove_borders"]:
@@ -212,11 +218,6 @@ class SuperPoint(nn.Module):
 
         # Convert (h, w) to (x, y)
         keypoints = [torch.flip(k, [1]).float() for k in keypoints]
-
-        # Compute the dense descriptors
-        cDa = self.relu(self.convDa(x))
-        descriptors = self.convDb(cDa)
-        descriptors = torch.nn.functional.normalize(descriptors, p=2, dim=1)
 
         # Extract descriptors
         descriptors = [
